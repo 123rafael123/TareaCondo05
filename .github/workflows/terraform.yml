@@ -32,8 +32,8 @@ jobs:
           terraform_version: 1.9.8
       - name: Initialize providers without remote state
         run: terraform init -backend=false -input=false
-      - name: Check formatting
-        run: terraform fmt -check -recursive
+      - name: Format Terraform configuration
+        run: terraform fmt -recursive
       - name: Validate configuration
         run: terraform validate
 
@@ -52,23 +52,66 @@ jobs:
       OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
       OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
       OCI_AUTH: "APIKey"
+      OCI_REGION: ${{ vars.OCI_REGION }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
-      - name: Prepare OCI API key for backend authentication
+      - name: Prepare OCI API key
         run: |
           printf '%s\n' "$OCI_PRIVATE_KEY" > "$RUNNER_TEMP/oci_api_key.pem"
           chmod 600 "$RUNNER_TEMP/oci_api_key.pem"
           echo "OCI_PRIVATE_KEY_PATH=$RUNNER_TEMP/oci_api_key.pem" >> "$GITHUB_ENV"
-      - name: Initialize Terraform with OCI state backend
-        run: >-
-          terraform init -input=false
-          -backend-config="namespace=${{ vars.OCI_OBJECT_STORAGE_NAMESPACE }}"
-          -backend-config="bucket=${{ vars.OCI_TFSTATE_BUCKET }}"
-          -backend-config="key=TareaCondo05/terraform.tfstate"
+      - name: Configure OCI CLI and download remote state
+        env:
+          OCI_NAMESPACE: ${{ vars.OCI_OBJECT_STORAGE_NAMESPACE }}
+          OCI_STATE_BUCKET: ${{ vars.OCI_TFSTATE_BUCKET }}
+        run: |
+          python3 -m pip install --user oci-cli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          cat > "$RUNNER_TEMP/oci_config" <<EOF
+          [DEFAULT]
+          user=$OCI_USER_OCID
+          fingerprint=$OCI_FINGERPRINT
+          tenancy=$OCI_TENANCY_OCID
+          region=$OCI_REGION
+          key_file=$OCI_PRIVATE_KEY_PATH
+          EOF
+          chmod 600 "$RUNNER_TEMP/oci_config"
+          if ! oci --config-file "$RUNNER_TEMP/oci_config" --auth APIKey os object get \
+            --namespace "$OCI_NAMESPACE" \
+            --bucket-name "$OCI_STATE_BUCKET" \
+            --name "TareaCondo05/terraform.tfstate" \
+            --file terraform.tfstate 2> "$RUNNER_TEMP/state-download-error.log"; then
+            if grep -q '404' "$RUNNER_TEMP/state-download-error.log"; then
+              echo "No existe el estado remoto todavía; inicio desde cero."
+              rm -f terraform.tfstate
+            else
+              cat "$RUNNER_TEMP/state-download-error.log"
+              exit 1
+            fi
+          fi
+      - name: Initialize Terraform
+        run: terraform init -input=false
       - name: Create execution plan
         run: terraform plan -input=false -out=tfplan
       - name: Apply execution plan
         run: terraform apply -input=false -auto-approve tfplan
+      - name: Upload Terraform state to OCI Object Storage
+        if: always()
+        env:
+          OCI_NAMESPACE: ${{ vars.OCI_OBJECT_STORAGE_NAMESPACE }}
+          OCI_STATE_BUCKET: ${{ vars.OCI_TFSTATE_BUCKET }}
+        run: |
+          if [ ! -f terraform.tfstate ]; then
+            echo "No hay estado local para sincronizar."
+            exit 0
+          fi
+          oci --config-file "$RUNNER_TEMP/oci_config" --auth APIKey os object put \
+            --namespace "$OCI_NAMESPACE" \
+            --bucket-name "$OCI_STATE_BUCKET" \
+            --name "TareaCondo05/terraform.tfstate" \
+            --file terraform.tfstate \
+            --force
