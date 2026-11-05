@@ -50,7 +50,6 @@ jobs:
       OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
       OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
       OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-      OCI_PRIVATE_KEY_PATH: ${{ runner.temp }}/oci_api_key.pem
       OCI_AUTH: "APIKey"
       OCI_REGION: ${{ vars.OCI_REGION }}
     steps:
@@ -59,9 +58,12 @@ jobs:
         with:
           terraform_version: 1.9.8
       - name: Prepare OCI API key
+        env:
+          OCI_PRIVATE_KEY_B64: ${{ secrets.OCI_PRIVATE_KEY }}
         run: |
-          printf '%s' "$OCI_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/oci_api_key.pem"
+          printf '%s' "$OCI_PRIVATE_KEY_B64" | base64 --decode > "$RUNNER_TEMP/oci_api_key.pem"
           chmod 600 "$RUNNER_TEMP/oci_api_key.pem"
+          echo "OCI_PRIVATE_KEY_PATH=$RUNNER_TEMP/oci_api_key.pem" >> "$GITHUB_ENV"
       - name: Configure OCI CLI and download remote state
         env:
           OCI_NAMESPACE: ${{ vars.OCI_OBJECT_STORAGE_NAMESPACE }}
