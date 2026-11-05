@@ -67,7 +67,7 @@ jobs:
           terraform init -input=false
           -backend-config="namespace=${{ vars.OCI_OBJECT_STORAGE_NAMESPACE }}"
           -backend-config="bucket=${{ vars.OCI_TFSTATE_BUCKET }}"
-          -backend-config="key=oci-vcn/terraform.tfstate"
+          -backend-config="key=TareaCondo05/terraform.tfstate"
       - name: Create execution plan
         run: terraform plan -input=false -out=tfplan
       - name: Apply execution plan
