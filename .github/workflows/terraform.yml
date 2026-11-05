@@ -80,7 +80,7 @@ jobs:
           key_file=$OCI_PRIVATE_KEY_PATH
           EOF
           chmod 600 "$RUNNER_TEMP/oci_config"
-          if ! oci --config-file "$RUNNER_TEMP/oci_config" --auth APIKey os object get \
+          if ! oci --config-file "$RUNNER_TEMP/oci_config" --auth api_key os object get \
             --namespace "$OCI_NAMESPACE" \
             --bucket-name "$OCI_STATE_BUCKET" \
             --name "TareaCondo05/terraform.tfstate" \
@@ -109,7 +109,7 @@ jobs:
             echo "No hay estado local para sincronizar."
             exit 0
           fi
-          oci --config-file "$RUNNER_TEMP/oci_config" --auth APIKey os object put \
+          oci --config-file "$RUNNER_TEMP/oci_config" --auth api_key os object put \
             --namespace "$OCI_NAMESPACE" \
             --bucket-name "$OCI_STATE_BUCKET" \
             --name "TareaCondo05/terraform.tfstate" \
