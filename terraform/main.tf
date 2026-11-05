@@ -46,3 +46,62 @@ resource "oci_core_subnet" "public" {
   prohibit_public_ip_on_vnic = false
   dns_label                  = "public"
 }
+
+
+terraform {
+  required_version = ">= 1.6.0"
+  required_providers {
+    oci = {
+      source  = "oracle/oci"
+      version = "~> 7.0"
+    }
+  }
+  backend "oci" {}
+}
+
+provider "oci" {
+  region = var.region
+}
+
+variable "compartment_ocid" {
+  description = "OCID of the OCI compartment where the VCN will be created."
+  type        = string
+}
+
+variable "region" {
+  description = "OCI region identifier."
+  type        = string
+}
+
+variable "vcn_name" {
+  description = "Name for the VCN."
+  type        = string
+  default     = "terraform-github-vcn"
+}
+
+variable "vcn_cidr" {
+  description = "IPv4 CIDR block for the VCN."
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "subnet_cidr" {
+  description = "IPv4 CIDR block for the subnet."
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+output "vcn_id" {
+  description = "OCID of the created VCN."
+  value       = oci_core_vcn.main.id
+}
+
+output "vcn_cidr" {
+  description = "CIDR block assigned to the VCN."
+  value       = oci_core_vcn.main.cidr_blocks[0]
+}
+
+output "public_subnet_id" {
+  description = "OCID of the created subnet."
+  value       = oci_core_subnet.public.id
+}
