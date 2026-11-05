@@ -60,7 +60,7 @@ jobs:
           terraform_version: 1.9.8
       - name: Prepare OCI API key
         run: |
-          printf '%s\n' "$OCI_PRIVATE_KEY" > "$RUNNER_TEMP/oci_api_key.pem"
+          printf '%s' "$OCI_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/oci_api_key.pem"
           chmod 600 "$RUNNER_TEMP/oci_api_key.pem"
           echo "OCI_PRIVATE_KEY_PATH=$RUNNER_TEMP/oci_api_key.pem" >> "$GITHUB_ENV"
       - name: Configure OCI CLI and download remote state
