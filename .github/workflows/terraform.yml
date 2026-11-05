@@ -1,0 +1,88 @@
+name: Terraform OCI
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oci-terraform
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Initialize providers without remote state
+        run: terraform init -backend=false -input=false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Validate configuration
+        run: terraform validate
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch'
+    needs: check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
+      TF_VAR_region: ${{ vars.OCI_REGION }}
+      OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+      OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+      OCI_AUTH: "APIKey"
+      OCI_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+      OCI_user_ocid: ${{ secrets.OCI_USER_OCID }}
+      OCI_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_region: ${{ vars.OCI_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Prepare OCI API key for backend authentication
+        run: |
+          printf '%s\n' "$OCI_PRIVATE_KEY" > "$RUNNER_TEMP/oci_api_key.pem"
+          chmod 600 "$RUNNER_TEMP/oci_api_key.pem"
+          echo "OCI_PRIVATE_KEY_PATH=$RUNNER_TEMP/oci_api_key.pem" >> "$GITHUB_ENV"
+          echo "OCI_private_key_path=$RUNNER_TEMP/oci_api_key.pem" >> "$GITHUB_ENV"
+
+      - name: Initialize Terraform with OCI state backend
+        run: >-
+          terraform init -input=false
+          -backend-config="namespace=${{ vars.OCI_OBJECT_STORAGE_NAMESPACE }}"
+          -backend-config="bucket=${{ vars.OCI_TFSTATE_BUCKET }}"
+          -backend-config="key=oci-vcn/terraform.tfstate"
+
+      - name: Create execution plan
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Apply execution plan
+        run: terraform apply -input=false -auto-approve tfplan
